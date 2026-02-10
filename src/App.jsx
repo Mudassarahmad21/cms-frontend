@@ -9,6 +9,7 @@ import Users from "./pages/Users";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./pages/Navbar";
 import Marketplace from "./pages/Marketplace";
+import Footer from "./pages/Footer";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/users" element={<ProtectedRoute roles={["ADMIN"]}><Users/></ProtectedRoute>}/>
           <Route path="/market" element={<ProtectedRoute roles={["ADMIN","CLIENT","BROKER","FARMER"]}><Marketplace/></ProtectedRoute>}/>
         </Routes>
+        <Footer/>
       </BrowserRouter>
     </AuthProvider>
   );

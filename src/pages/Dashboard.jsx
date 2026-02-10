@@ -1,125 +1,3 @@
-// import { useEffect, useState } from "react";
-// import api from "../services/api";
-// import { Pie, Bar } from "react-chartjs-2";
-// import {
-//   Chart as ChartJS,
-//   ArcElement,
-//   Tooltip,
-//   Legend,
-//   CategoryScale,
-//   LinearScale,
-//   BarElement,
-// } from "chart.js";
-
-// ChartJS.register(
-//   ArcElement,
-//   Tooltip,
-//   Legend,
-//   CategoryScale,
-//   LinearScale,
-//   BarElement,
-// );
-
-// export default function Dashboard() {
-//   const [stats, setStats] = useState(null);
-
-//   useEffect(() => {
-//     api
-//       .get("/stats")
-//       .then((res) => setStats(res.data))
-//       .catch((err) => console.error(err));
-//   }, []);
-
-//   if (!stats)
-//     return (
-//       <div className="container mt-4">
-//         <p>Loading stats...</p>
-//       </div>
-//     );
-
-//   // Pie chart for crop categories
-//   const pieData = {
-//     labels: stats.charts.map((c) => c._id),
-//     datasets: [
-//       {
-//         data: stats.charts.map((c) => c.count),
-//         backgroundColor: [
-//           "#007bff",
-//           "#28a745",
-//           "#ffc107",
-//           "#dc3545",
-//           "#6f42c1",
-//         ],
-//       },
-//     ],
-//   };
-
-//   // Bar chart for revenue
-//   const barData = {
-//     labels: ["Revenue"],
-//     datasets: [
-//       {
-//         label: "Total Revenue",
-//         data: [stats.cards.revenue],
-//         backgroundColor: "#17a2b8",
-//       },
-//     ],
-//   };
-
-//   return (
-//     <div className="container mt-4">
-//       <h2>Dashboard</h2>
-//       <div className="row mb-4">
-//         <div className="col-md-3">
-//           <div className="card text-center">
-//             <div className="card-body">
-//               <h5>Crops</h5>
-//               <p>{stats.cards.crops}</p>
-//             </div>
-//           </div>
-//         </div>
-//         <div className="col-md-3">
-//           <div className="card text-center">
-//             <div className="card-body">
-//               <h5>Users</h5>
-//               <p>{stats.cards.users}</p>
-//             </div>
-//           </div>
-//         </div>
-//         <div className="col-md-3">
-//           <div className="card text-center">
-//             <div className="card-body">
-//               <h5>Orders</h5>
-//               <p>{stats.cards.orders}</p>
-//             </div>
-//           </div>
-//         </div>
-//         <div className="col-md-3">
-//           <div className="card text-center">
-//             <div className="card-body">
-//               <h5>Revenue</h5>
-//               <p>${stats.cards.revenue}</p>
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* Charts Section */}
-//       <div className="row">
-//         <div className="col-md-6">
-//           <h5>Crops by Category</h5>
-//           <Pie data={pieData} />
-//         </div>
-//         <div className="col-md-6">
-//           <h5>Total Revenue</h5>
-//           <Bar data={barData} />
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-// pages/Dashboard.jsx
 import { useEffect, useState, useContext } from "react";
 import api from "../services/api";
 import { AuthContext } from "../context/AuthContext";
@@ -227,9 +105,9 @@ export default function Dashboard() {
           <div className="card shadow-sm p-4 h-100">
             <h5>Recent Activity Log</h5>
             <ul className="list-group list-group-flush mt-3">
-              <li className="list-group-item px-0">📦 New order placed for Wheat</li>
-              <li className="list-group-item px-0">✅ User "Farmer Joe" approved</li>
-              <li className="list-group-item px-0">💰 Revenue hit a new milestone!</li>
+              <li className="list-group-item px-0">• New order placed for Wheat</li>
+              <li className="list-group-item px-0">• User "Farmer Joe" approved</li>
+              <li className="list-group-item px-0">• Revenue hit a new milestone!</li>
             </ul>
           </div>
         </div>

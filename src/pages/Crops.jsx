@@ -12,17 +12,6 @@ export default function Crops() {
       .catch(err => console.error(err));
   }, []);
 
-  // Add crop
-  // const handleSubmit = async (e) => {
-  //   e.preventDefault();
-  //   try {
-  //     const res = await api.post("/crops", form);
-  //     setCrops([...crops, res.data]);
-  //     setForm({ name:"", type:"", quantity:"", price:"", location:"" });
-  //   } catch (err) {
-  //     alert(err.response?.data?.message || "Failed to add crop");
-  //   }
-  // };
 // Add crop
   const handleSubmit = async (e) => {
   e.preventDefault();
