@@ -4,7 +4,7 @@ import api from '../services/api';
 
 export const AuthContext = createContext();
 
-export default AuthProvider = ({ children }) => {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export default AuthProvider = ({ children }) => {
         if (decoded.exp * 1000 < Date.now()) {
           localStorage.clear();
         } else {
-          setUser(JSON.parse(localStorage.getItem('user')));
+          setUser(JSON.parse(localStorage.getItem('user') || '{}'));
         }
       } catch {
         localStorage.clear();
@@ -23,10 +23,16 @@ export default AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = (data) => {
-    setUser(data.user);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    localStorage.setItem('token', data.token);
+  const login = async (formData) => {
+    try {
+      const response = await api.post('/auth/login', formData);
+      const { user: userData, token } = response.data;
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('token', token);
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
   };
 
   const logout = () => {
