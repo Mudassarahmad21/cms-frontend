@@ -1,48 +1,65 @@
-import { createContext, useState, useEffect } from 'react';
-import jwtDecode from 'jwt-decode';
-import api from '../services/api';
+import { createContext, useState, useContext } from "react";
+import { jwtDecode } from "jwt-decode";
 
 export const AuthContext = createContext();
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+// Default guest — no login needed to browse
+const GUEST = { id: "guest", name: "Guest", role: "CLIENT", isGuest: true };
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      try {
-        const decoded = jwtDecode(token);
-        if (decoded.exp * 1000 < Date.now()) {
-          localStorage.clear();
-        } else {
-          setUser(JSON.parse(localStorage.getItem('user') || '{}'));
-        }
-      } catch {
-        localStorage.clear();
-      }
+function getStoredUser() {
+  try {
+    const token = localStorage.getItem("token");
+    const user  = JSON.parse(localStorage.getItem("user") || "null");
+    if (!token || !user) return GUEST;
+
+    const decoded = jwtDecode(token);
+    if (decoded.exp * 1000 < Date.now()) {
+      localStorage.clear();
+      return GUEST;
     }
-  }, []);
-
-  const login = async (formData) => {
-    try {
-      const response = await api.post('/auth/login', formData);
-      const { user: userData, token } = response.data;
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('token', token);
-    } catch (error) {
-      console.error('Login failed:', error);
-    }
-  };
-
-  const logout = () => {
-    setUser(null);
+    return { ...user, isGuest: false };
+  } catch {
     localStorage.clear();
+    return GUEST;
+  }
+}
+
+export function AuthProvider({ children }) {
+  const [user,  setUser]  = useState(getStoredUser);
+  const [token, setToken] = useState(() => localStorage.getItem("token") || null);
+
+  // Real login from API response
+  const login = (data) => {
+    const u = { ...data.user, isGuest: false };
+    setUser(u);
+    setToken(data.token);
+    localStorage.setItem("user",  JSON.stringify(u));
+    localStorage.setItem("token", data.token);
   };
+
+  // Logout → back to guest
+  const logout = () => {
+    setUser(GUEST);
+    setToken(null);
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+  };
+
+  // Switch role view (sidebar role-tabs, works for both guests and logged-in)
+  const switchRole = (role) => {
+    setUser((prev) => ({ ...prev, role }));
+  };
+
+  const isLoggedIn = !!token && !user.isGuest;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoggedIn, login, logout, switchRole }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
+
+// Convenience hook
+export function useAuth() {
+  return useContext(AuthContext);
+}

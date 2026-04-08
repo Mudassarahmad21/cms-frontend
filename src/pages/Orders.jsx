@@ -1,121 +1,399 @@
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { Link } from "react-router-dom";
 import api from "../services/api";
-import { AuthContext } from "../context/AuthContext";
+
+const DUMMY_CROPS = [
+  { _id: "dc1", name: "Golden Wheat", price: 45 },
+  { _id: "dc2", name: "Basmati Rice", price: 120 },
+  { _id: "dc3", name: "Alphonso Mango", price: 180 },
+];
+
+const DUMMY_ORDERS = [
+  {
+    _id: "do1",
+    client: { name: "Ahmed Client" },
+    items: [{ crop: { name: "Golden Wheat" }, quantity: 10 }],
+    totalPrice: 450,
+    status: "delivered",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    _id: "do2",
+    client: { name: "Zara Client" },
+    items: [{ crop: { name: "Basmati Rice" }, quantity: 20 }],
+    totalPrice: 2400,
+    status: "approved",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    _id: "do3",
+    client: { name: "Ahmed Client" },
+    items: [{ crop: { name: "Alphonso Mango" }, quantity: 8 }],
+    totalPrice: 1440,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  },
+];
+
+const STATUS_STYLE = {
+  pending: { bg: "rgba(245,158,11,0.12)", color: "#f59e0b" },
+  approved: { bg: "rgba(59,130,246,0.12)", color: "#3b82f6" },
+  delivered: { bg: "rgba(34,197,94,0.12)", color: "#22c55e" },
+};
 
 export default function Orders() {
-  const { user } = useContext(AuthContext);
+  const { user, isLoggedIn } = useAuth();
   const [orders, setOrders] = useState([]);
-  const [items, setItems] = useState([{ crop:"", quantity:1 }]);
   const [crops, setCrops] = useState([]);
+  const [items, setItems] = useState([{ crop: "", quantity: 1 }]);
+  const [loading, setLoading] = useState(true);
+  const [placing, setPlacing] = useState(false);
+  const [alert, setAlert] = useState(null);
+  const [isDummy, setIsDummy] = useState(false);
 
-  // Load crops for selection
+  const isAdminOrBroker = isLoggedIn && ["ADMIN", "BROKER"].includes(user.role);
+  const isClient = isLoggedIn && user.role === "CLIENT";
+
   useEffect(() => {
-    api.get("/crops").then(res => setCrops(res.data));
+    // Always load crops for the order form dropdown
+    api
+      .get("/crops")
+      .then((r) => setCrops(r.data.length ? r.data : DUMMY_CROPS))
+      .catch(() => setCrops(DUMMY_CROPS));
   }, []);
 
-  // Load orders depending on role
   useEffect(() => {
-    if (user.role === "CLIENT") {
-      api.get("/orders/myorders").then(res => setOrders(res.data));
-    } else if (["ADMIN","BROKER"].includes(user.role)) {
-      api.get("/orders").then(res => setOrders(res.data));
+    if (!isLoggedIn) {
+      setOrders(DUMMY_ORDERS);
+      setIsDummy(true);
+      setLoading(false);
+      return;
     }
-  }, [user.role]);
+    setLoading(true);
+    const url = isClient ? "/orders/myorders" : "/orders";
+    api
+      .get(url)
+      .then((r) => {
+        if (r.data.length === 0) {
+          setOrders(DUMMY_ORDERS);
+          setIsDummy(true);
+        } else {
+          setOrders(r.data);
+          setIsDummy(false);
+        }
+      })
+      .catch(() => {
+        setOrders(DUMMY_ORDERS);
+        setIsDummy(true);
+      })
+      .finally(() => setLoading(false));
+  }, [isLoggedIn, user.role]); // eslint-disable-line
 
-  // Place order (Client only)
-  const handlePlaceOrder = async (e) => {
-    e.preventDefault();
-    const totalPrice = items.reduce((sum, i) => {
-      const crop = crops.find(c => c._id === i.crop);
-      return sum + (crop?.price || 0) * i.quantity;
+  const showAlert = (type, text) => {
+    setAlert({ type, text });
+    setTimeout(() => setAlert(null), 4500);
+  };
+
+  const calcTotal = () =>
+    items.reduce((sum, i) => {
+      const c = crops.find((cr) => cr._id === i.crop);
+      return sum + (c?.price || 0) * (Number(i.quantity) || 0);
     }, 0);
 
+  const updateItem = (idx, field, val) => {
+    const next = [...items];
+    next[idx] = {
+      ...next[idx],
+      [field]: field === "quantity" ? Number(val) : val,
+    };
+    setItems(next);
+  };
+
+  const handlePlace = async (e) => {
+    e.preventDefault();
+    if (items.some((i) => !i.crop))
+      return showAlert("error", "Select a crop for every item");
+    if (items.some((i) => i.quantity < 1))
+      return showAlert("error", "Each quantity must be at least 1");
+
+    setPlacing(true);
     try {
-      const res = await api.post("/orders", { items, totalPrice });
-      setOrders([...orders, res.data]);
-      setItems([{ crop:"", quantity:1 }]);
+      const res = await api.post("/orders", { items, totalPrice: calcTotal() });
+      setOrders((p) => [res.data, ...p]);
+      setItems([{ crop: "", quantity: 1 }]);
+      setIsDummy(false);
+      showAlert("success", "✅ Order placed successfully!");
     } catch (err) {
-      alert(err.response?.data?.message || "Order failed");
+      showAlert(
+        "error",
+        err.response?.data?.message || "Failed to place order",
+      );
+    } finally {
+      setPlacing(false);
     }
   };
 
-  // Update order status (Admin/Broker)
-  const handleStatusUpdate = async (id, status) => {
-    const res = await api.put(`/orders/${id}/status`, { status });
-    setOrders(orders.map(o => o._id === id ? res.data : o));
+  const handleStatus = async (id, status) => {
+    try {
+      const res = await api.put(`/orders/${id}/status`, { status });
+      setOrders((p) => p.map((o) => (o._id === id ? res.data : o)));
+    } catch (err) {
+      showAlert("error", err.response?.data?.message || "Status update failed");
+    }
   };
 
   return (
-    <div className="container mt-4">
-      <h2>Orders</h2>
+    <div className="page-wrapper page-enter">
+      <h1 className="page-title">📦 Orders</h1>
+      <p className="page-subtitle">
+        {isClient
+          ? "Place and track your orders"
+          : isAdminOrBroker
+            ? "Manage all customer orders"
+            : "View order activity"}
+      </p>
 
-      {/* Client: Place Order */}
-      {user.role === "CLIENT" && (
-        <form onSubmit={handlePlaceOrder} className="mb-4">
-          <h5>Place New Order</h5>
-          {items.map((item, idx) => (
-            <div className="row mb-2" key={idx}>
-              <div className="col-md-6">
-                <select className="form-control" value={item.crop}
-                  onChange={(e)=> {
-                    const newItems = [...items];
-                    newItems[idx].crop = e.target.value;
-                    setItems(newItems);
-                  }}>
-                  <option value="">Select Crop</option>
-                  {crops.map(c => (
-                    <option key={c._id} value={c._id}>{c.name} (${c.price})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-3">
-                <input type="number" className="form-control" min="1" value={item.quantity}
-                  onChange={(e)=> {
-                    const newItems = [...items];
-                    newItems[idx].quantity = Number(e.target.value);
-                    setItems(newItems);
-                  }}/>
-              </div>
-            </div>
-          ))}
-          <button className="btn btn-success">Place Order</button>
-        </form>
+      {!isLoggedIn && (
+        <div className="alert alert-success">
+          💡 Showing sample orders —{" "}
+          <Link to="/login" style={{ color: "var(--green)", fontWeight: 700 }}>
+            Login as Client
+          </Link>{" "}
+          to place real orders, or as Admin/Broker to manage them
+        </div>
+      )}
+      {isDummy && isLoggedIn && (
+        <div className="alert alert-success">
+          💡 No orders yet — run{" "}
+          <code
+            style={{
+              background: "rgba(34,197,94,0.2)",
+              padding: "1px 6px",
+              borderRadius: 4,
+              fontSize: 12,
+            }}
+          >
+            node seed.js
+          </code>{" "}
+          to load sample data
+        </div>
       )}
 
-      {/* Orders Table */}
-      <table className="table table-striped">
-        <thead>
-          <tr>
-            <th>Client</th><th>Items</th><th>Total Price</th><th>Status</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map(o=>(
-            <tr key={o._id}>
-              <td>{o.client?.name || "Me"}</td>
-              <td>
-                {o.items.map(i=>(
-                  <div key={i._id}>{i.crop?.name} x {i.quantity}</div>
-                ))}
-              </td>
-              <td>${o.totalPrice}</td>
-              <td>{o.status}</td>
-              <td>
-                {["ADMIN","BROKER"].includes(user.role) && (
-                  <>
-                    {["pending","approved","delivered"].map(s=>(
-                      <button key={s} className="btn btn-sm btn-outline-primary me-1"
-                        onClick={()=>handleStatusUpdate(o._id, s)}>
-                        {s}
-                      </button>
-                    ))}
-                  </>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {alert && <div className={`alert alert-${alert.type}`}>{alert.text}</div>}
+
+      {/* ── Place Order (Client only) ── */}
+      {isClient && (
+        <div className="card" style={{ marginBottom: "24px" }}>
+          <h3
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "15px",
+              fontWeight: 700,
+              color: "var(--text-secondary)",
+              marginBottom: "18px",
+            }}
+          >
+            + Place New Order
+          </h3>
+          <form onSubmit={handlePlace}>
+            {items.map((item, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  marginBottom: "10px",
+                  alignItems: "center",
+                }}
+              >
+                <select
+                  className="form-control"
+                  style={{ flex: 2 }}
+                  value={item.crop}
+                  onChange={(e) => updateItem(idx, "crop", e.target.value)}
+                  required
+                >
+                  <option value="">Select crop…</option>
+                  {crops.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name} — ${c.price}/kg
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="1"
+                  className="form-control"
+                  style={{ flex: 1 }}
+                  value={item.quantity}
+                  onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                  placeholder="Qty"
+                  required
+                />
+                <button
+                  type="button"
+                  className="btn btn-danger btn-icon"
+                  onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                  disabled={items.length === 1}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                marginTop: "14px",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setItems([...items, { crop: "", quantity: 1 }])}
+              >
+                + Add Item
+              </button>
+              <span
+                style={{
+                  flex: 1,
+                  color: "var(--text-secondary)",
+                  fontSize: "14px",
+                }}
+              >
+                Total:{" "}
+                <strong
+                  style={{
+                    color: "var(--green)",
+                    fontFamily: "var(--font-display)",
+                    fontSize: "18px",
+                  }}
+                >
+                  ${calcTotal().toFixed(2)}
+                </strong>
+              </span>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={placing}
+              >
+                {placing ? "Placing…" : "Place Order"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Orders Table ── */}
+      {loading ? (
+        <div className="spinner-wrap">
+          <div className="spinner" />
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-icon">📦</div>
+          <h4>No orders yet</h4>
+          <p>
+            {isClient
+              ? "Place your first order above"
+              : "No orders in the system yet"}
+          </p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Date</th>
+                {isAdminOrBroker && <th>Update Status</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((o) => {
+                const s = STATUS_STYLE[o.status] || STATUS_STYLE.pending;
+                return (
+                  <tr key={o._id}>
+                    <td
+                      style={{ color: "var(--text-primary)", fontWeight: 600 }}
+                    >
+                      {o.client?.name || user.name}
+                    </td>
+                    <td>
+                      {o.items.map((i, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            fontSize: "12px",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {i.crop?.name || "—"} × {i.quantity}
+                        </div>
+                      ))}
+                    </td>
+                    <td style={{ color: "var(--green)", fontWeight: 700 }}>
+                      ${o.totalPrice.toLocaleString()}
+                    </td>
+                    <td>
+                      <span
+                        className="badge"
+                        style={{ background: s.bg, color: s.color }}
+                      >
+                        {o.status}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: "12px" }}>
+                      {o.createdAt
+                        ? new Date(o.createdAt).toLocaleDateString()
+                        : "—"}
+                    </td>
+                    {isAdminOrBroker && (
+                      <td>
+                        <div style={{ display: "flex", gap: "5px" }}>
+                          {["pending", "approved", "delivered"].map((st) => (
+                            <button
+                              key={st}
+                              className="btn btn-sm"
+                              disabled={o.status === st || isDummy}
+                              onClick={() => handleStatus(o._id, st)}
+                              style={{
+                                background:
+                                  o.status === st
+                                    ? STATUS_STYLE[st].bg
+                                    : "transparent",
+                                color:
+                                  o.status === st
+                                    ? STATUS_STYLE[st].color
+                                    : "var(--text-muted)",
+                                border: `1px solid ${o.status === st ? STATUS_STYLE[st].color + "55" : "var(--border-default)"}`,
+                                textTransform: "capitalize",
+                                cursor:
+                                  o.status === st || isDummy
+                                    ? "default"
+                                    : "pointer",
+                              }}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
